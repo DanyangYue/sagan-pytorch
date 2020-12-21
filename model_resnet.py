@@ -239,7 +239,7 @@ class Generator(nn.Module):
         self.conv = nn.ModuleList([ConvBlock(512, 512, n_class=n_class),
                                    ConvBlock(512, 512, n_class=n_class),
                                    ConvBlock(512, 256, n_class=n_class),
-                                   SelfAttention(256),
+                                   Dual_Attention(256),
                                    ConvBlock(256, 128, n_class=n_class),
                                    ConvBlock(128, 64, n_class=n_class)])
 
@@ -287,7 +287,7 @@ class Discriminator(nn.Module):
 
         self.conv = nn.Sequential(conv(64, 128),
                                   conv(128, 256, downsample=False),
-                                  SelfAttention(256),
+                                  Dual_Attention(256),
                                   conv(256, 512),
                                   conv(512, 512),
                                   conv(512, 512))
