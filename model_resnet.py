@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as F
-
+from torch.nn import Parameter as P
 import functools
 from torch.autograd import Variable
 
@@ -105,7 +105,50 @@ class SelfAttention(nn.Module):
         out = self.gamma * attn + input
 
         return out
+class CAM_Module(nn.Module):
+    """ Channel attention module"""
+    def __init__(self, ch):
+        super(CAM_Module, self).__init__()
+        self.chanel_in = ch
+        self.gamma = P(torch.zeros(1), requires_grad=True)
+        self.softmax  = nn.Softmax(dim=-1)
+    def forward(self, x, y=None):
+        """
+        inputs :
+            x : input feature maps( B X C X H X W)
+        returns :
+            out : attention value + input feature
+            attention: B X C X C
+        """
+        m_batchsize, C, height, width = x.size()
+        proj_query = x.view(m_batchsize, C, -1)
+        proj_key = x.view(m_batchsize, C, -1).permute(0, 2, 1)
+        energy = torch.bmm(proj_query, proj_key)
+        energy_new = torch.max(energy, -1, keepdim=True)[0].expand_as(energy)-energy
+        attention = self.softmax(energy_new)
+        proj_value = x.view(m_batchsize, C, -1)
 
+        out = torch.bmm(attention, proj_value)
+        out = out.view(m_batchsize, C, height, width)
+
+        out = self.gamma*out + x
+        return out
+
+class Dual_Attention(nn.Module):
+    def __init__(self, ch，gain=2 ** 0.5):
+        super(Dual_Attention, self).__init__()
+        self.ch = ch
+        self.gain = gain
+        self.PAM_Module=SelfAttention(self.ch, gain=self.gain)
+        self.CAM_Module=CAM_Module(self.ch)
+        self.pa_conv = spectral_init(nn.Conv2d(self.ch, self.ch, kernel_size=3, padding=1, bias=False),gain=self.gain)
+        self.ca_conv = spectral_init(nn.Conv2d(self.ch, self.ch, kernel_size=3, padding=1, bias=False),gain=self.gain)
+
+    def forward(self, x, y=None):
+        pam = self.pa_conv(self.PAM_Module(x))
+        cam = self.ca_conv(self.CAM_Module(x))
+        out = pam+cam
+        return out
 
 class ConditionalNorm(nn.Module):
     def __init__(self, in_channel, n_class):
@@ -125,7 +168,6 @@ class ConditionalNorm(nn.Module):
         out = gamma * out + beta
 
         return out
-
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channel, out_channel, kernel_size=[3, 3],
